@@ -29,4 +29,4 @@ The second part implements the SPMV by multiplying the sparse matrix elements wi
 The third phase implements a CRC checksum
 
 # Phase 4
-the fourth phase implements an HLS version of all the phases using C on the Vivado HLS suite.
+The fourth phase implements an HLS version of all the phases using C on the Vivado HLS suite.
