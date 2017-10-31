@@ -61,14 +61,21 @@ use IEEE.Numeric_std.all;
 --use UNISIM.VComponents.all;
 
 entity CSR_and_Voters is
-  Port (Clock         : in std_logic;
-        CLK           : in std_logic;
-        TMR_Dat_Addr  : in std_logic_vector(4 downto 0);
-        TMR_Ind_Addr  : in std_logic_vector(4 downto 0);
-        TMR_Ptr_Addr  : in std_logic_vector(2 downto 0);  
-        TMR_Value_Out : out std_logic_vector(7 downto 0);
-        TMR_Index_Out : out std_logic_vector(7 downto 0);
-        TMR_Ptr_Out   : out std_logic_vector(7 downto 0));
+  Port (Clock               : in std_logic;
+        CLK                 : in std_logic;
+        Clock_FiFo          : in std_logic;
+        RST_FiFo            : in std_logic;
+        Wr_En_Fifo          : in std_logic;
+        Rd_En_Fifo          : in std_logic;
+        Full_Fifo           : out std_logic;
+        Empty_Fifo          : out std_logic;
+        TMR_Dat_Addr        : in std_logic_vector(4 downto 0);
+        --TMR_Ind_Addr  : in std_logic_vector(4 downto 0);
+       -- Write_FiFo          : in std_logic_vector(7 downto 0);
+        TMR_Ptr_Addr        : in std_logic_vector(2 downto 0);  
+        TMR_FIFO_Value_Out  : out std_logic_vector(7 downto 0);
+        TMR_FIFO_Index_Out  : out std_logic_vector(7 downto 0);
+        TMR_FIFO_Ptr_Out    : out std_logic_vector(7 downto 0));
 end CSR_and_Voters;
 
 architecture Behavioral of CSR_and_Voters is
@@ -76,7 +83,23 @@ signal Dat_Mem_Vot_1, Dat_Mem_Vot_2, Dat_Mem_Vot_3   : std_logic_vector(7 downto
 signal Ind_Mem_Vot_1, Ind_Mem_Vot_2, Ind_Mem_Vot_3   : std_logic_vector(7 downto 0);
 signal Ptr_Mem_Vot_1, Ptr_Mem_Vot_2, Ptr_Mem_Vot_3   : std_logic_vector(7 downto 0);
 signal Dat_Vot_Out, Ind_Vot_Out, Ptr_Vot_Out         : std_logic_vector(7 downto 0);
-signal CLock_Delay                                   : std_logic;                                   
+signal CLock_Delay                                   : std_logic;   
+--signal Clock_Fifo                                    : std_logic;
+--signal RST_FiFo                                      : std_logic;
+--signal Wr_En_Fifo                                    : std_logic;
+--signal Rd_En_Fifo                                    : std_logic;
+--signal Full_Fifo                                     : std_logic;
+--signal Empty_Fifo                                    : std_logic;
+signal TMR_Value_Out                                 : std_logic_vector(7 downto 0);
+signal TMR_Value1_Out                                 : std_logic_vector(7 downto 0);
+signal TMR_Value2_Out                                 : std_logic_vector(7 downto 0);
+signal Read_Fifo                                     : std_logic_vector(7 downto 0);
+--signal FIFO_W                                        : std_logic_vector(7 downto 0);
+--signal FIFO_D                                        : std_logic_vector(16 downto 0);
+constant FIFO_PTR_D                                    : integer := 6;
+constant FIFO_D                                      : integer := 17;
+constant FIFO_W                                      : integer := 8;
+
 --======================== Start Component Declaration ==========================================================================
 ----------------------------------------- Start Data Voter Component -----------------------------------------------------------------------
 component Data_Voter is
@@ -133,13 +156,77 @@ component CSR_Array_3 is
             Read_Index_3  : out std_logic_vector(7 downto 0);
             Read_Ptr_3    : out std_logic_vector(7 downto 0));
 end component;
+-------------------------------------
+component NNZ_FIFO is
+    generic (
+            FIFO_WIDTH : natural := 8;
+            FIFO_DEPTH : integer := 17
+            );
+    port (  RST    : in std_logic;
+            clock  : in std_logic;
+  --Rd_clk : in std_logic;
+ 
+    -- FIFO Write Interface
+            wr_en   : in  std_logic;
+            wr_data : in  std_logic_vector(FIFO_WIDTH-1 downto 0);
+            full    : out std_logic;
+ 
+    -- FIFO Read Interface
+            rd_en   : in  std_logic;
+            rd_data : out std_logic_vector(FIFO_WIDTH-1 downto 0);
+            empty   : out std_logic
+         );
+end component;
+------------------------------
+component Index_FIFO is
+    generic (
+            FIFO_WIDTH : natural := 8;
+            FIFO_DEPTH : integer := 17
+            );
+    port (  RST    : in std_logic;
+            clock  : in std_logic;
+  --Rd_clk : in std_logic;
+ 
+    -- FIFO Write Interface
+            wr_en   : in  std_logic;
+            wr_data : in  std_logic_vector(FIFO_WIDTH-1 downto 0);
+            full    : out std_logic;
+ 
+    -- FIFO Read Interface
+            rd_en   : in  std_logic;
+            rd_data : out std_logic_vector(FIFO_WIDTH-1 downto 0);
+            empty   : out std_logic
+         );
+end component;
+----------------------
+component Ptr_FIFO is
+    generic (
+            FIFO_WIDTH : natural := 8;
+            FIFO_DEPTH : integer := 17
+            );
+    port (  RST    : in std_logic;
+            clock  : in std_logic;
+  --Rd_clk : in std_logic;
+ 
+    -- FIFO Write Interface
+            wr_en   : in  std_logic;
+            wr_data : in  std_logic_vector(FIFO_WIDTH-1 downto 0);
+            full    : out std_logic;
+ 
+    -- FIFO Read Interface
+            rd_en   : in  std_logic;
+            rd_data : out std_logic_vector(FIFO_WIDTH-1 downto 0);
+            empty   : out std_logic
+         );
+end component;
+
 --========================= End of Components declaration ===========================================================================
 begin
 --================================== Component Instantiation =======================================================================
 --------------------------- CSR_Array_1 Component Instantiattion -------------------------------------------------------------------
 CSR_FORMAT_1:  CSR_Array_1 port map (Clock        => clock,
                                      Data_Addr    => TMR_Dat_Addr,
-                                     Index_Addr   => TMR_Ind_Addr,
+                                     Index_Addr   => TMR_Dat_Addr,
                                      Ptr_Addr     => TMR_Ptr_Addr,
                                      Read_Data_1  => Dat_Mem_Vot_1,
                                      Read_Index_1 => Ind_Mem_Vot_1,
@@ -147,7 +234,7 @@ CSR_FORMAT_1:  CSR_Array_1 port map (Clock        => clock,
 --------------------------- CSR_Array_2 Component Instantiattion -------------------------------------------------------------------
 CSR_FORMAT_2:  CSR_Array_2 port map (Clock        => clock,
                                      Data_Addr    => TMR_Dat_Addr,
-                                     Index_Addr   => TMR_Ind_Addr,
+                                     Index_Addr   => TMR_Dat_Addr,
                                      Ptr_Addr     => TMR_Ptr_Addr,
                                      Read_Data_2  => Dat_Mem_Vot_2,
                                      Read_Index_2 => Ind_Mem_Vot_2,
@@ -155,7 +242,7 @@ CSR_FORMAT_2:  CSR_Array_2 port map (Clock        => clock,
 --------------------------- CSR_Array_3 Component Instantiattion -------------------------------------------------------------------         
 CSR_FORMAT_3:  CSR_Array_3 port map (Clock        => clock,
                                      Data_Addr    => TMR_Dat_Addr,
-                                     Index_Addr   => TMR_Ind_Addr,
+                                     Index_Addr   => TMR_Dat_Addr,
                                      Ptr_Addr     => TMR_Ptr_Addr,
                                      Read_Data_3  => Dat_Mem_Vot_3,
                                      Read_Index_3 => Ind_Mem_Vot_3,
@@ -195,8 +282,54 @@ PTRS_VOTER: Ptr_Voter port map (clock             => CLK,
                                 Ptr_Voter_Out     => Ptr_Vot_Out);
 ----===============================End of voter instantiation ========================================================================
 --================ Start mapping thte output of the voters to the actual TMR outputs==================================================
-TMR_Value_Out <= Dat_Vot_Out; -- Map Data Voter as the Non-zero output of the TMR with Voter
-TMR_Index_Out <= Ind_Vot_Out; -- Map Index Voter as the Non-zero output of the TMR with Voter
-TMR_Ptr_Out <= Ptr_Vot_Out;   -- Map Pointer Voter as the Non-zero output of the TMR with Voter
+--TMR_Value_Out <= Dat_Vot_Out; -- Map Data Voter as the Non-zero output of the TMR with Voter
+--TMR_Index_Out <= Ind_Vot_Out; -- Map Index Voter as the Non-zero output of the TMR with Voter
+--TMR_Ptr_Out <= Ptr_Vot_Out;   -- Map Pointer Voter as the Non-zero output of the TMR with Voter
 --======================== End of output mapping. ====================================================================================                              
+FIFO_NNZ: NNZ_FIFO 
+    generic map (FIFO_WIDTH => FIFO_W,
+                 FIFO_DEPTH => FIFO_D)
+    port map (RST       => RST_FiFo,
+              clock     => Clock_FiFo,
+      -- FIFO Write Interface
+              wr_en     => wr_en_FiFo,
+              wr_data   => Dat_Vot_Out,
+              full      => Full_FiFo, 
+    -- FIFO Read Interface
+              rd_en     => Rd_En_FiFo,
+              rd_data   => TMR_Value_Out,
+              empty     => Empty_FiFo);
+-----------------------------------------------
+FIFO_Index: Index_FIFO 
+    generic map (FIFO_WIDTH => FIFO_W,
+                 FIFO_DEPTH => FIFO_D)
+    port map (RST       => RST_FiFo,
+              clock     => Clock_FiFo,
+      -- FIFO Write Interface
+              wr_en     => wr_en_FiFo,
+              wr_data   => Ind_Vot_Out,
+              full      => Full_FiFo, 
+    -- FIFO Read Interface
+              rd_en     => Rd_En_FiFo,
+              rd_data   => TMR_Value1_Out,
+              empty     => Empty_FiFo);
+---------------------------------------------------------
+FIFO_PTR: Ptr_FIFO
+    generic map (FIFO_WIDTH => FIFO_W,
+                 FIFO_DEPTH => FIFO_D)
+port map (RST       => RST_FiFo,
+          clock     => Clock_FiFo,
+  -- FIFO Write Interface
+          wr_en     => wr_en_FiFo,
+          wr_data   => Ptr_Vot_Out,
+          full      => Full_FiFo, 
+-- FIFO Read Interface
+          rd_en     => Rd_En_FiFo,
+          rd_data   => TMR_Value2_Out,
+          empty     => Empty_FiFo);
+-------------
+ TMR_FIFO_Value_Out <= TMR_Value_Out;
+ TMR_FIFO_Index_Out <= TMR_Value1_Out;
+ TMR_FIFO_Ptr_Out   <= TMR_Value2_Out;
+ --------------------
 end Behavioral;
